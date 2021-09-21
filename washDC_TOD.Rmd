@@ -1,0 +1,358 @@
+---
+title: "Transit Oriented Development in the District of Columbia"
+author: "Johnathan Clementi"
+date: '9/24/2021'
+output:
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction 
+Purpose: Prepare a policy brief for local City Council representatives. Do households value transit-rich neighborhoods compared to others? How certain can you be about your conclusions given some of the spatial biases we’ve discussed?
+
+Details: Provide a brief motivation at the beginning, annotate each visualization appropriately, and then provide brief policy-relevant conclusions. Please show all code blocks. Here are the specific deliverables:
+
+1. Show your data wrangling work.
+2. Four small-multiple (2000 & 2017+) visualizations comparing four selected Census variables across time and space (TOD vs. non-TOD).
+3. One grouped bar plot making these same comparisons.
+4. One table making these same comparisons.
+5. Create two graduated symbol maps of population and rent within 0.5 mile of each transit station. Google for more information, but a graduate symbol map represents quantities for each transit station proportionally.
+6. Create a geom_line plot that shows mean rent as a function of distance to subway stations (Figure 1.17). To do this you will need to use the multipleRingBuffer function found in the functions.R script.
+7. Download and wrangle point-level crime data (pick a crime type). What is the relationship between crime, transit access and rents?
+
+
+# Setup
+
+#### Load Libraries
+```{r setup_package, warning = FALSE, message = FALSE}
+rm(list=ls()) ##Clear my objects from memory
+
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(tmap) # mapping, install if you don't have it
+library(kableExtra)
+library(rgdal)
+
+options(scipen=999)
+options(tigris_class = "sf")
+
+palette5 <- c("#f0f9e8","#bae4bc","#7bccc4","#43a2ca","#0868ac") #colorwheel
+```
+
+#### Load Styling Options
+```{r}
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.text.x = element_text(size = 14))
+}
+
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+```
+#### Load distribution break functions
+```{r}
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]],
+                 c(.01,.2,.4,.6,.8), na.rm=T), digits = 3))
+  }
+}
+
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+```
+
+
+
+# Retrieving and Wrangling Census, Transit, and Crime Data
+
+#### Retrieve data from Census Bureau using tidycensus
+```{r}
+# Declare census variables of interest
+census_var2000 <- c("P001001", "P006002", "PCT025009", "PCT025050", "P053001", "H056001", "P092001")
+census_var2017 <- c("B25026_001E", "B02001_002E", "B15001_009E", "B15001_050E", "B19013_001E", "B25058_001E", "B06012_002E")
+# total pop - p001001 or B25026_001E
+# median age of males - p006002 (2000) or b02001_002e
+# total male: 18-24 w/ bachelors degree - pct025009 or b15001_009e
+# total female: 1824 w/ bachelors degree - pct025050 or b15001_050e
+# median household income - p053001 or b19013_001e
+# median contract rent - h056001 or b25058_001e
+# total living in poverty - p092001 or b06012_002e
+
+tractsDC.00 <- get_decennial(geography = "tract",
+                                 year = 2000,
+                                 variables = census_var2000,
+                                 geometry = TRUE,
+                                 state = 11999,
+                                 output = "wide")
+
+tractsDC.17 <- get_acs(geography = "tract", 
+                           variables = census_var2017, 
+                           year=2017, 
+                           state=11999,
+                           geometry=TRUE, 
+                           output="wide")
+
+```
+
+#### Wrangle Census Data:
+```{r}
+#glimpse(tractsDC.00)
+
+cleanTracts00 <- 
+  tractsDC.00 %>%
+  dplyr::select( -NAME, -geometry) %>%
+  #spread(variable, estimate) %>%
+  #st_drop_geometry() %>% #Drop geometry is the new way of removing the sf geometry class from the dataframe
+	st_transform('ESRI:102746') %>%
+  rename(TotalPop = P001001, 
+  			 Whites = P006002, 
+  			 MaleBachelors = PCT025009,
+         FemaleBachelors = PCT025050, 
+  			 MedHHInc = P053001, 
+  			 MedRent = H056001,
+         TotalPoverty = P092001) %>%
+	mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop, 0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2000") %>%
+  dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
+
+#glimpse(cleanTracts00)
+
+#glimpse(tractsDC.17)
+
+cleanTracts17 <- 
+	tractsDC.17 %>%
+	dplyr::select(-geometry, -B25026_001M, -B02001_002M, -B15001_009M, 
+								-B15001_050M, -B19013_001M, -B25058_001M, -B06012_002M) %>% # Remove margin of error columns
+	st_transform('ESRI:102746') %>%
+  rename(TotalPop = B25026_001E, 
+  			 Whites = B02001_002E,
+         FemaleBachelors = B15001_050E, 
+  			 MaleBachelors = B15001_009E,
+         MedHHInc = B19013_001E, 
+  			 MedRent = B25058_001E,
+         TotalPoverty = B06012_002E) %>%
+  #dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
+         pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
+         year = "2017") %>%
+  dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -NAME)
+
+#glimpse(cleanTracts17)
+
+allTracts <- rbind(cleanTracts00,cleanTracts17)
+#glimpse(allTracts)
+
+```
+
+#### Retrieve & Clean Washington Metro Data
+```{r}
+# Although the Metro extends into multiple counties and cities in Virginia and Maryland, we will only examine stations in DC
+metroStops <- st_read("https://opendata.arcgis.com/datasets/54018b7f06b943f2af278bbe415df1de_52.geojson")
+metroLines <- st_read("https://opendata.arcgis.com/datasets/a29b9dbb2f00459db2b0c3c56faca297_106.geojson")
+
+# We need to clean up the stops data a bit
+# There are some stops in which multiple lines visit the stop. For our case, we will take the first stop listed
+metroStops <- 
+	metroStops %>%
+	mutate(LINE = 
+				 	plyr::revalue(LINE, 
+						replace = c(
+			 				"green, yellow" = "green", 
+			 				"grn, yllw, orange, blue, slvr" = "green", 
+				 			"red, green, yellow" = "red", 
+			 				"red, blue, orange, silver" = "red",
+				 			"blue, orange, silver" = "blue",
+				 			"orange, blue, silver" = "orange"
+					 	)
+				 	)
+				) %>%
+	st_transform('ESRI:102746')
+
+metroLines <-
+	metroLines %>%
+	st_transform('ESRI:102746')
+	
+
+```
+
+# Map Metro Stops & Lines
+```{r}
+
+# Map of Metro Stops
+ggplot() + 
+  geom_sf(data=st_union(cleanTracts00)) +
+  geom_sf(data=metroStops, 
+          aes(colour = LINE), 
+          show.legend = "point", size= 2) +
+  scale_colour_manual(values = c("blue", "green", "orange", "red"), name = "Metro Line") +
+  labs(title="Metro Stops", 
+       subtitle="District of Columbia", 
+       caption="Figure 1: Washington DC Metro Station locations, colored by Metro Line") +
+  mapTheme()
+
+# Map of Metro Lines
+ggplot() +
+	geom_sf(data = cleanTracts00) +
+	geom_sf(data = metroLines,
+					aes(color = NAME),
+					show.legend = "line", size=2
+					) +
+	scale_color_manual(values = c("blue", "green", "orange", "red", "gray", "yellow"), name = "Metro Line") +
+	labs(title = "Metro Lines",
+			 subtitle = "District of Columbia",
+			 ) +
+	mapTheme()
+```
+
+
+# Analysis
+
+#### Identifying TOD and Non-TOD Census Tracts:
+```{r}
+# First, lets define regions around each stop
+# Create 0.5 mile (2640 foot) buffer around each transit station
+# 0.5 mile is generally how far people are willing to walk to transportation
+stopBuffers <- 
+  rbind(
+    st_buffer(metroStops, 2640) %>%
+      mutate(Legend = "Buffer") %>%
+      dplyr::select(Legend),
+    st_union(st_buffer(metroStops, 2640)) %>%
+      st_sf() %>%
+      mutate(Legend = "Unioned Buffer"))
+
+# Sometimes those regions overlap, we need to get rid of those overlaps
+# Create an sf object with ONLY the unioned buffer
+buffer <- filter(stopBuffers, Legend=="Unioned Buffer")
+
+# Lets indentify the census tracts that overlap with the station buffered regions
+# We will evaluate if the census tract centroid is within the station buffer region
+
+### THIS IS AN INTERMEDIATE STEP AND MAY NOT NEED ITS OWN VARIABLE ###
+selectCentroids <-
+  st_centroid(cleanTracts00)[buffer,] %>%
+  st_drop_geometry() %>%
+  left_join(dplyr::select(cleanTracts00, GEOID)) %>%
+  st_sf() %>%
+  dplyr::select(TotalPop) %>%
+  mutate(Selection_Type = "Select by Centroids")
+
+
+
+# We want to be able to identify the tracts by whether they are TOD or Non-TOD
+# Here we evaluate whether the census tract centroid is within the TOD buffer region
+# and appropriately assign it a "TOD" or "Non-TOD" string
+allTracts.group <- 
+  rbind(
+    st_centroid(allTracts)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD"))
+
+# For visualization purposes down the line, we will create an sf object
+# that has the outline of all TOD census tracts
+#Create Outline of TOD Tracts for use in mapping
+TOD_region <-
+  allTracts.group%>%
+    dplyr::select(TOD)%>%
+  filter(TOD=="TOD") %>%
+  st_union()%>%
+      st_sf()
+
+```
+
+
+# Visualizizing Trends in Census Data:
+
+#### TOD vs Non-TOD tracts across time
+```{r}
+
+# Lets visualize and compare the TOD/Non-TOD tracts across time
+ggplot(allTracts.group)+
+  geom_sf(data = st_union(cleanTracts17))+
+  geom_sf(aes(fill = TOD)) +
+  scale_fill_manual(values = c("grey80","red")) +
+  labs(title = "TOD and Non-TOD Census Tracts",
+       subtitle="Washington DC",
+       caption="Figure 2: TOD and Non-TOD census tracts in 2000 and 2017. TOD census tracts are those where the 
+                centroid is located within a half-mile of a Metro station") +
+  facet_wrap(~year)+
+  mapTheme() 
+
+```
+
+#### Population trends across space and time
+```{r}
+
+# Here we're just looking at Total Population with quantile breaks
+ggplot() +
+  geom_sf(data = cleanTracts00, aes(fill = q5(TotalPop))) +
+  scale_fill_manual(values = palette5,
+  									labels = qBr(cleanTracts00, "TotalPop"), 
+                    name = "Popluation\n(Quintile Breaks)") +
+  labs(title = "Total Population", subtitle = "District of Columbia; 2000") +
+  mapTheme()
+
+# Lets visualize and compare total population within the TOD/Non-TOD tracts across time
+ggplot(allTracts.group)+
+  geom_sf(data = st_union(cleanTracts17))+
+	geom_sf(data = TOD_region, fill="transparent", color ="red", size=1)+
+  geom_sf(aes(fill = TotalPop)) +
+  scale_fill_stepsn(colours =  palette5,
+  									labels = qBr(allTracts.group, "TotalPop"), 
+                    name = "Popluation\n(Quintile Breaks)") +
+  labs(title = "Total Population 2000-2017",
+       subtitle="Washington DC",
+       caption="Figure 3: Total population by census tract in 2000 and 2017") +
+  facet_wrap(~year)+
+  mapTheme() 
+
+```
