@@ -344,9 +344,9 @@ ggplot() +
 # Lets visualize and compare total population within the TOD/Non-TOD tracts across time
 ggplot(allTracts.group)+
   geom_sf(data = st_union(cleanTracts17))+
-	geom_sf(data = TOD_region, fill="transparent", color ="red", size=1)+
-  geom_sf(aes(fill = TotalPop)) +
-  scale_fill_stepsn(colours =  palette5,
+	geom_sf(aes(fill = q5(TotalPop))) +
+	geom_sf(data = TOD_region, fill="transparent", color ="red", size=0.5)+
+  scale_fill_manual(values =  palette5,
   									labels = qBr(allTracts.group, "TotalPop"), 
                     name = "Popluation\n(Quintile Breaks)") +
   labs(title = "Total Population 2000-2017",
