@@ -261,17 +261,16 @@ ggplot() +
 # Create 0.5 mile (2640 foot) buffer around each transit station
 # 0.5 mile is generally how far people are willing to walk to transportation
 stopBuffers <- 
-  rbind(
-    st_buffer(metroStops, 2640) %>%
-      mutate(Legend = "Buffer") %>%
-      dplyr::select(Legend),
-    st_union(st_buffer(metroStops, 2640)) %>%
-      st_sf() %>%
-      mutate(Legend = "Unioned Buffer"))
+  st_buffer(metroStops, 2640) %>%
+    mutate(Legend = "Buffer")
+      
 
 # Sometimes those regions overlap, we need to get rid of those overlaps
 # Create an sf object with ONLY the unioned buffer
-buffer <- filter(stopBuffers, Legend=="Unioned Buffer")
+buffer <- 
+  st_union(stopBuffers) %>%
+    st_sf() %>%
+    mutate(Legend = "Unioned Buffer")
 
 # Lets indentify the census tracts that overlap with the station buffered regions
 # We will evaluate if the census tract centroid is within the station buffer region
@@ -460,6 +459,40 @@ allTracts.SummaryPlot
 
 #### Visualizing change in population within 0.5 miles of a metro stop
 ```{r}
+
+# Lets find the intersecting regions of the tracts and our previously created 0.5 mile regions around the metro stops
+station_tracts <- st_intersection(allTracts, stopBuffers)
+
+# Lets summarize those data so we can join it back to the station points and visualize it
+station_summary <-
+	station_tracts %>%
+	st_drop_geometry() %>%
+	group_by(year, GIS_ID) %>%
+	summarize(Population = sum(TotalPop),
+						Rent = mean(MedRent, na.rm = T)
+						) %>%
+	filter()
+
+# Complete the join of the summarized data to the station points
+station_GeoSummary <-
+	left_join(metroStops, station_summary, by = "GIS_ID") %>%
+	dplyr::select(-WEB_URL, -TRAININFO_URL)
+
+# Now that we have the data ready, lets visualize it
+
+# Graduated Symbols map visualizing population
+ggplot(station_GeoSummary) +
+	geom_sf(data = allTracts)+
+	geom_sf(aes(size = Population), color = "#7bccc4", ) +
+	facet_wrap(~year) +
+	mapTheme()
+
+# Graduated Symbols map visualizing rent
+ggplot(station_GeoSummary) +
+	geom_sf(data = allTracts)+
+	geom_sf(aes(size = Rent), color = "#43a2ca", ) +
+	facet_wrap(~year) +
+	mapTheme()
 
 ```
 
