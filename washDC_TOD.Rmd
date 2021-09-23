@@ -629,4 +629,13 @@ ggplot(allTracts.rings.summary,
 	geom_point()
 ```
 
+# Trends in Crime, Transit, and Housing
+```{r}
+# Read in crime data
+crime08 <- st_read("https://opendata.arcgis.com/datasets/180d56a1551c4e76ac2175e63dc0dce9_32.geojson") %>%
+	st_transform('ESRI:102746')
+crime17 <- st_read("https://opendata.arcgis.com/datasets/6af5cb8dc38e4bcbac8168b27ee104aa_38.geojson") %>%
+	st_transform('ESRI:102746')
+
+```
 
