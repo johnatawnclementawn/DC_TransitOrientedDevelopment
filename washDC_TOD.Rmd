@@ -117,12 +117,21 @@ census_var2017 <- c("B25026_001E", "B02001_002E", "B15001_009E", "B15001_050E", 
 # median contract rent - h056001 or b25058_001e
 # total living in poverty - p092001 or b06012_002e
 
+# Note: can use the census_vars2017 for the 2010 ACS - they are the same field identiers
+
 tractsDC.00 <- get_decennial(geography = "tract",
                                  year = 2000,
                                  variables = census_var2000,
                                  geometry = TRUE,
                                  state = 11999,
                                  output = "wide")
+
+tractsDC.10 <- get_acs(geography = "tract", 
+                           variables = census_var2017, 
+                           year=2010, 
+                           state=11999,
+                           geometry=TRUE, 
+                           output="wide")
 
 tractsDC.17 <- get_acs(geography = "tract", 
                            variables = census_var2017, 
@@ -135,8 +144,6 @@ tractsDC.17 <- get_acs(geography = "tract",
 
 #### Wrangle Census Data:
 ```{r}
-#glimpse(tractsDC.00)
-
 cleanTracts00 <- 
   tractsDC.00 %>%
   dplyr::select( -NAME, -geometry) %>%
@@ -150,7 +157,7 @@ cleanTracts00 <-
   			 MedHHInc = P053001, 
   			 MedRent = H056001,
          TotalPoverty = P092001) %>%
-	mutate(MedRentAdjusted = (MedRent * 1.423),
+	mutate(MedRentAdjusted = (MedRent * 1.423), # Adjust for inflation
 				 pctWhite = ifelse(TotalPop > 0, Whites / TotalPop, 0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop), 0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
@@ -160,9 +167,6 @@ cleanTracts00 <-
 			 pctWhite.scaled = pctWhite * 100) %>%
   dplyr::select(-Whites,-FemaleBachelors,-MaleBachelors,-TotalPoverty)
 
-#glimpse(cleanTracts00)
-
-#glimpse(tractsDC.17)
 
 cleanTracts17 <- 
 	tractsDC.17 %>%
@@ -177,7 +181,7 @@ cleanTracts17 <-
   			 MedRent = B25058_001E,
          TotalPoverty = B06012_002E) %>%
   #dplyr::select(-NAME, -starts_with("B")) %>%
-  mutate(MedRentAdjusted = (MedRent * 1.423),
+  mutate(MedRentAdjusted = (MedRent * 1),
   			 pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
          pctBachelors = ifelse(TotalPop > 0, ((FemaleBachelors + MaleBachelors) / TotalPop),0),
          pctPoverty = ifelse(TotalPop > 0, TotalPoverty / TotalPop, 0),
@@ -187,10 +191,10 @@ cleanTracts17 <-
 				 pctWhite.scaled = pctWhite * 100) %>%
   dplyr::select(-Whites, -FemaleBachelors, -MaleBachelors, -TotalPoverty, -NAME)
 
-#glimpse(cleanTracts17)
+
 
 allTracts <- rbind(cleanTracts00,cleanTracts17)
-#glimpse(allTracts)
+
 
 ```
 
@@ -646,14 +650,78 @@ ggplot(allTracts.rings.summary,
 	geom_point()
 ```
 
-# Trends in Crime, Transit, and Housing
-```{r}
-# Read in crime data
-crime08 <- st_read("https://opendata.arcgis.com/datasets/180d56a1551c4e76ac2175e63dc0dce9_32.geojson") %>%
-	st_transform('ESRI:102746')
-crime17 <- st_read("https://opendata.arcgis.com/datasets/6af5cb8dc38e4bcbac8168b27ee104aa_38.geojson") %>%
-	st_transform('ESRI:102746')
+# Trends in Crime, Transit, and Rent
 
-# Transform 
+#### Load and clean crime data
+```{r}
+# 2010 crime data (earliest available, is 2008, but use 2010 for decenial census)
+crime10 <- st_read("https://opendata.arcgis.com/datasets/fdacfbdda7654e06a161352247d3a2f0_34.geojson") %>%
+	st_transform('ESRI:102746') %>%
+	filter(grepl('THEFT',OFFENSE)) %>%
+	mutate(crimeYear = "2010") %>%
+	dplyr::select(OFFENSE,crimeYear)
+
+# 2017 crime data (consistent with upper end of census data we are analyzing)
+crime17 <- st_read("https://opendata.arcgis.com/datasets/6af5cb8dc38e4bcbac8168b27ee104aa_38.geojson") %>%
+	st_transform('ESRI:102746') %>%
+	filter(grepl('THEFT',OFFENSE)) %>%
+	mutate(crimeYear = "2017") %>%
+	dplyr::select(OFFENSE,crimeYear) #%>%
+	# dplyr::select(-geometry)
+
+# Place all crime data in same df
+allCrime <- rbind(crime10, crime17)
+allCrime <- mutate(allCrime, crimeCounter = 1)
+	
 ```
+
+
+```{r}
+# Intersect crimes with the station buffer/census tract polygons we already created
+crime_station_tracts <- st_intersection(allCrime, station_tracts)
+
+# Lets summarize those data so we can join it back to the station points and visualize it
+crime_station_summary <-
+	crime_station_tracts %>%
+	st_drop_geometry() %>%
+	group_by(crimeYear, GIS_ID) %>%
+	summarize(Population = sum(TotalPop),
+						Rent = mean(MedRent, na.rm = T),
+						Crime = sum(crimeCounter)
+						) %>%
+	filter()
+
+# Complete the join of the summarized data to the station points
+crime_station_GeoSummary <-
+	left_join(metroStops, crime_station_summary, by = "GIS_ID") %>%
+	dplyr::select(-WEB_URL, -TRAININFO_URL)
+
+```
+
+
+```{r}
+# Now that we have the data ready, lets visualize it
+# Graduated Symbols map visualizing population
+ggplot(crime_station_GeoSummary) +
+	geom_sf(data = allTracts)+
+	geom_sf(aes(size = Population), color = "#7bccc4", ) +
+	facet_wrap(~year) +
+	mapTheme()
+
+# Graduated Symbols map visualizing rent
+ggplot(crime_station_GeoSummary) +
+	geom_sf(data = allTracts)+
+	geom_sf(aes(size = Rent), color = "#43a2ca", ) +
+	facet_wrap(~year) +
+	mapTheme()
+
+# Graduated Symbols map visualizing crime 
+ggplot(crime_station_GeoSummary) +
+	geom_sf(data = allTracts)+
+	geom_sf(aes(size = Crime), color = "#0868ac", ) +
+	facet_wrap(~year) +
+	mapTheme()
+
+```
+
 
