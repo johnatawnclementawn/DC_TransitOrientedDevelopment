@@ -496,14 +496,14 @@ station_GeoSummary <-
 # Graduated Symbols map visualizing population
 ggplot(station_GeoSummary) +
 	geom_sf(data = allTracts)+
-	geom_sf(aes(size = Population), color = "#7bccc4", ) +
+	geom_sf(aes(size = Population), color = "#7bccc4") +
 	facet_wrap(~year) +
 	mapTheme()
 
 # Graduated Symbols map visualizing rent
 ggplot(station_GeoSummary) +
 	geom_sf(data = allTracts)+
-	geom_sf(aes(size = Rent), color = "#43a2ca", ) +
+	geom_sf(aes(size = Rent), color = "#43a2ca") +
 	facet_wrap(~year) +
 	mapTheme()
 
@@ -683,78 +683,72 @@ cleanTracts10 <-
 
 allTracts10_17 <- rbind(cleanTracts10,cleanTracts17)
 
+# Identify 2010 & 2017 tracts by TOD & Non-TOD
+allTracts10_17.group <- 
+  rbind(
+    st_centroid(allTracts10_17)[buffer,] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts10_17) %>%
+      st_sf() %>%
+      mutate(TOD = "TOD"),
+    st_centroid(allTracts10_17)[buffer, op = st_disjoint] %>%
+      st_drop_geometry() %>%
+      left_join(allTracts10_17) %>%
+      st_sf() %>%
+      mutate(TOD = "Non-TOD"))
+
 
 # 2010 crime data (earliest available, is 2008, but use 2010 for decenial census)
 crime10 <- st_read("https://opendata.arcgis.com/datasets/fdacfbdda7654e06a161352247d3a2f0_34.geojson") %>%
 	st_transform('ESRI:102746') %>%
 	filter(grepl('THEFT',OFFENSE)) %>%
-	mutate(crimeYear = "2010") %>%
-	dplyr::select(OFFENSE,crimeYear)
+	mutate(crimeYear = "2010", OFFENSE = "THEFT", crimeCounter = 1) %>%
+	dplyr::select(OFFENSE,crimeYear,crimeCounter)
 
 # 2017 crime data (consistent with upper end of census data we are analyzing)
 crime17 <- st_read("https://opendata.arcgis.com/datasets/6af5cb8dc38e4bcbac8168b27ee104aa_38.geojson") %>%
 	st_transform('ESRI:102746') %>%
 	filter(grepl('THEFT',OFFENSE)) %>%
-	mutate(crimeYear = "2017") %>%
-	dplyr::select(OFFENSE,crimeYear) #%>%
-	# dplyr::select(-geometry)
+	mutate(crimeYear = "2017", OFFENSE = "THEFT",crimeCounter = 1) %>%
+	dplyr::select(OFFENSE,crimeYear,crimeCounter) 
 
 # Place all crime data in same df
 allCrime <- rbind(crime10, crime17)
-allCrime <- mutate(allCrime, crimeCounter = 1)
-	
 ```
 
 #### Associate crime data with TOD tracts
 ```{r}
 # Intersect crimes with the station buffer/census tracts from 2010 & 2017 (instead of station_tracts which is 2000 & 2017)
 station_tracts10_17 <- st_intersection(allTracts10_17, stopBuffers)
-crime_station_tracts <- st_intersection(allCrime, station_tracts10_17)
+
+
+crime_station_tracts <- st_join(station_tracts10_17, allCrime) %>%
+	filter(year == crimeYear) %>%
+	dplyr::select(GEOID, year, MedRentAdjusted, GIS_ID, crimeYear, OFFENSE, crimeCounter)
 
 ```
 
 
 ```{r}
 # Lets summarize those data so we can join it back to the station points and visualize it
-pop_rent_summary <-
+rent_crime_byStation <-
 	crime_station_tracts %>%
 	st_drop_geometry() %>%
 	group_by(year, GIS_ID) %>%
-	summarize(Population = sum(TotalPop),
-						Rent = mean(MedRent, na.rm = T)
+	summarize(Rent = mean(MedRentAdjusted, na.rm = T),
+						Crime = sum(crimeCounter)
 						) %>%
 	filter()
 
-# Aggregate crime counts by year (2010) and stop
-crime10_station_summary <-
-	crime_station_tracts %>%
-	st_drop_geometry() %>%
-	group_by(crimeYear,GIS_ID) %>%
-	summarize(Crime = sum(crimeYear=="2010")) %>%
-	filter(crimeYear=="2010")
 
-crime17_station_summary <-
-	crime_station_tracts %>%
-	st_drop_geometry() %>%
-	group_by(crimeYear,GIS_ID) %>%
-	summarize(Crime = sum(crimeYear=="2017")) %>%
-	filter(crimeYear=="2017")
-
-# Collapse yearly crime counts by stop into one column
-crime_summary <- rbind(crime10_station_summary, crime17_station_summary)
-
-
-# Add aggregated crime data
-pop_rent_crime_summary <-
-	left_join(crime_summary, pop_rent_summary, by = c("GIS_ID"="GIS_ID", "crimeYear"="year"))
 
 
 ```
 
 ```{r}
 # Complete the join of the summarized data to the station points
-crime_station_GeoSummary <-
-	left_join(metroStops, pop_rent_crime_summary, by = "GIS_ID") %>%
+rentCrime_GeoByStation <-
+	left_join(metroStops, rent_crime_byStation, by = "GIS_ID") %>%
 	dplyr::select(-WEB_URL, -TRAININFO_URL)
 
 ```
@@ -762,22 +756,16 @@ crime_station_GeoSummary <-
 
 ```{r}
 # Now that we have the data ready, lets visualize it
-# Graduated Symbols map visualizing population
-ggplot(crime_station_GeoSummary) +
-	geom_sf(data = allTracts10_17)+
-	geom_sf(aes(size = Population), color = "#7bccc4", ) +
-	facet_wrap(~year) +
-	mapTheme()
 
 # Graduated Symbols map visualizing rent
-ggplot(crime_station_GeoSummary) +
+ggplot(rentCrime_GeoByStation) +
 	geom_sf(data = allTracts10_17)+
 	geom_sf(aes(size = Rent), color = "#43a2ca", ) +
 	facet_wrap(~year) +
 	mapTheme()
 
 # Graduated Symbols map visualizing crime 
-ggplot(crime_station_GeoSummary) +
+ggplot(rentCrime_GeoByStation) +
 	geom_sf(data = allTracts10_17)+
 	geom_sf(aes(size = Crime), color = "#0868ac", ) +
 	facet_wrap(~year) +
@@ -785,4 +773,52 @@ ggplot(crime_station_GeoSummary) +
 
 ```
 
+#### Tabulate differenes in crime & rend across TOD / Non-TOD tracts
+```{r}
+# For comparison of rent and crime within TOD & Non-TOD, join crime data to allTracts df for 2010 & 2017
+crime_tracts <- st_join(allTracts10_17.group, allCrime) %>%
+	filter(year == crimeYear) %>%
+	dplyr::select(GEOID, year, MedRentAdjusted, TOD, crimeYear, OFFENSE, crimeCounter)
+
+# Summarize tracts by total crimes and avg rent per year
+crime_tracts.summary <-
+	st_drop_geometry(crime_tracts) %>%
+	group_by(year, TOD) %>%
+	summarize(Rent = mean(MedRentAdjusted, na.rm = T),
+						Crime = sum(crimeCounter, na.rm = T)
+						)
+
+# Clean up summary 
+crimeTracts.SummaryTable <-
+	crime_tracts.summary %>%
+  unite(year.TOD, year, TOD, sep = ": ", remove = T) %>%
+  gather(Variable, Value, -year.TOD) %>%
+  mutate(Value = round(Value, 2)) %>%
+  spread(year.TOD, Value)
+
+# Print nice kable table
+table2 <- 
+	kable(crimeTracts.SummaryTable) %>%
+  kable_styling() %>%
+  footnote(general_title = "\n",
+           general = "Table 1.3")
+
+table2
+```
+
+
+#### Visualizing change in rent and crime indicators across time and TOD / Non-TOD tracts
+```{r}
+crimeTracts.SummaryPlot <-
+	crime_tracts.summary %>%
+  gather(Variable, Value, -year, -TOD) %>%
+  ggplot(aes(year, Value, fill = TOD)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    facet_wrap(~Variable, scales = "free", ncol=5) +
+    scale_fill_manual(values = c("#bae4bc", "#0868ac")) +
+    labs(title = "Indicator differences across time and space") +
+    plotTheme() + theme(legend.position="bottom")
+
+crimeTracts.SummaryPlot
+```
 
