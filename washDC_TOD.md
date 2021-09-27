@@ -8,9 +8,7 @@ output:
     code_folding: "hide"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+
 
 # Introduction 
 
@@ -25,7 +23,8 @@ To give you an indication of your constituents’’ demand for TOD, we have put
 # Retrieving and Wrangling Census, Transit, and Crime Data
 
 #### Load Libraries, Styling Options, and Custom Functions 
-```{r setup_package, warning = FALSE, message = FALSE}
+
+```r
 rm(list=ls()) ##Clear my objects from memory
 
 library(tidyverse)
@@ -181,7 +180,8 @@ figCounter <- 1
 
 
 #### Retrieve data from Census Bureau using tidycensus
-```{r pullCensus, warning = FALSE, message = FALSE, results='hide'}
+
+```r
 # Declare census variables of interest
 census_var2000 <- c("P001001", "P006002", "PCT025009", "PCT025050", "P053001", "H056001", "P092001")
 census_var2017 <- c("B25026_001E", "B02001_002E", "B15001_009E", "B15001_050E", "B19013_001E", "B25058_001E", "B06012_002E")
@@ -207,11 +207,11 @@ tractsDC.17 <- get_acs(geography = "tract",
                            state=11999,
                            geometry=TRUE, 
                            output="wide")
-
 ```
 
 #### Wrangle Census Data:
-```{r wrangleCensus, results='hide'}
+
+```r
 cleanTracts00 <- 
   tractsDC.00 %>%
   dplyr::select( -NAME, -geometry) %>%
@@ -267,7 +267,8 @@ allTracts <- rbind(cleanTracts00,cleanTracts17)
 ```
 
 #### Retrieve & Clean Washington Metro Data
-```{r pullMetro, results='hide'}
+
+```r
 # Although the Metro extends into multiple counties and cities in Virginia and Maryland, we will only examine stations in DC
 metroStops <- st_read("https://opendata.arcgis.com/datasets/54018b7f06b943f2af278bbe415df1de_52.geojson") %>%
 	st_transform('ESRI:102746')
@@ -293,7 +294,8 @@ metroStops <-
 ```
 
 #### Load and clean crime data & additional census data
-```{r pullCrime, warning = FALSE, message = FALSE, results='hide'}
+
+```r
 # Retrieve 2010 census data
 # Note: can use the census_vars2017 for the 2010 ACS - they are the same field identiers
 tractsDC.10 <- get_acs(geography = "tract", 
@@ -355,8 +357,8 @@ allCrime <- rbind(crime10, crime17)
 # Map Metro Stops & Lines
 
 Here is a map of the metro stops we are interested in, colored by line that they serve. For generalization purposes, the stations that serve multiple lines have been aggregated. This aggregation does not play a role in our analysis.
-```{r metroViz}
 
+```r
 # Map of Metro Stops
 ggplot() + 
   geom_sf(data=st_union(cleanTracts00)) +
@@ -370,29 +372,17 @@ ggplot() +
   mapTheme()
 ```
 
-```{r metroLineViz, include = FALSE, warning = FALSE, message = FALSE, results='hide'}
-# Map of Metro Lines
-ggplot() +
-	geom_sf(data = cleanTracts00) +
-	geom_sf(data = metroLines,
-					aes(color = NAME),
-					show.legend = "line", size=2
-					) +
-	scale_color_manual(values = c("blue", "green", "orange", "red", "gray", "yellow"), name = "Metro Line") +
-	labs(title = "Metro Lines",
-			 subtitle = "Washington DC",
-			 caption=paste0("Figure ", figCounter,": Washington DC Metro Lines\nData from US Census Bureau & Open Data DC")
-			 ) +
-	mapTheme()
+![](washDC_TOD_files/figure-html/metroViz-1.png)<!-- -->
 
-```
+
 
 
 # Analysis
 
 #### Identifying TOD and Non-TOD Census Tracts:
 
-```{r identTOD, warning = FALSE, message = FALSE}
+
+```r
 # First, lets define regions around each stop
 # Create 0.5 mile (2640 foot) buffer around each transit station
 # 0.5 mile is generally how far people are willing to walk to transportation
@@ -446,7 +436,6 @@ TOD_region <-
   filter(TOD=="TOD") %>%
   st_union()%>%
       st_sf()
-
 ```
 
 
@@ -455,7 +444,8 @@ TOD_region <-
 #### TOD vs Non-TOD tracts across time
 
 Here we have identified the census tracts in which one or more Metro stops are located. These tracts will be identified as tracts that are possible locations for Transit Oriented Development and labeled TOD. Tracts that do not have a Metro stop are labeled as non-TOD. The difference in TOD and non-TOD will serve as the backbone of our analysis.
-```{r viz1TOD}
+
+```r
 figCounter = figCounter + 1
 
 # Lets visualize and compare the TOD/Non-TOD tracts across time
@@ -471,10 +461,13 @@ ggplot(allTracts.group)+
   mapTheme() 
 ```
 
+![](washDC_TOD_files/figure-html/viz1TOD-1.png)<!-- -->
+
 #### Trends in population across space and time
 
 This figure illustrates the total population by tract reported for the 2000 Census and estimated for the 2017 American Community Survey (ACS). Our data for the first part of the analysis come from these two sources. In this figure, notice how there are not major swings in population across the District. While some tracts may increase or decrease, in aggregate they generally remain the same. Our TOD tracts have been highlighted in a red outline. 
-```{r vizPopTOD}
+
+```r
 figCounter = figCounter + 1
 
 # Lets visualize and compare total population within the TOD/Non-TOD tracts across time
@@ -492,10 +485,13 @@ ggplot(allTracts.group)+
   mapTheme() 
 ```
 
+![](washDC_TOD_files/figure-html/vizPopTOD-1.png)<!-- -->
+
 #### Trends in median household income across space and time
 
 Here we illustrate the changes in median household income by tract. These figures have been adjusted for inflation but notice that across most TOD tracts the median household income has increased dramatically. Most TOD tracts, especially in the Downtown, Dupont Circle, and Mount Vernon Square neighborhoods, have increased.
-```{r, vizIncomeTOD}
+
+```r
 figCounter = figCounter + 1
 
 ggplot(allTracts.group)+
@@ -512,10 +508,13 @@ ggplot(allTracts.group)+
   mapTheme()
 ```
 
+![](washDC_TOD_files/figure-html/vizIncomeTOD-1.png)<!-- -->
+
 #### Trends in median rent prices across space and time
 
 While income has increased in select parts of the District, rent has increased across all tracts. At first glance, the rent market does seem to value TOD tracts more than non-TOD markets. We will confirm this later.
-```{r vizRentTOD2}
+
+```r
 figCounter = figCounter + 1
 
 ### ADJUSTED FOR INFLATION!!!
@@ -533,11 +532,14 @@ ggplot(allTracts.group)+
   mapTheme()
 ```
 
+![](washDC_TOD_files/figure-html/vizRentTOD2-1.png)<!-- -->
+
 
 #### Trends in poverty across space and time
 
 This figure seems to indicate a drastic decrease in the percent of people in poverty in the District. There are several factors that could be driving this. One could be that policy measures put in place have increased District constituents’ well-being and ability to rise out of poverty. Another explanation is that wealthier people have displaced those in poverty, indicating the process of gentrification throughout the District. 
-```{r vizPovTOD}
+
+```r
 figCounter = figCounter + 1
 
 ggplot(allTracts.group)+
@@ -554,9 +556,12 @@ ggplot(allTracts.group)+
   mapTheme()
 ```
 
+![](washDC_TOD_files/figure-html/vizPovTOD-1.png)<!-- -->
+
 #### Tabulating change in indicators across time and TOD / Non-TOD tracts
 
-```{r tableIndicators, warning = FALSE, message = FALSE}
+
+```r
 allTracts.Summary <- 
   st_drop_geometry(allTracts.group) %>%
     group_by(year, TOD) %>%
@@ -583,10 +588,65 @@ table1 <-
 table1
 ```
 
+<table class="table" style="margin-left: auto; margin-right: auto;border-bottom: 0;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> Variable </th>
+   <th style="text-align:right;"> 2000: Non-TOD </th>
+   <th style="text-align:right;"> 2000: TOD </th>
+   <th style="text-align:right;"> 2017: Non-TOD </th>
+   <th style="text-align:right;"> 2017: TOD </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Percent_Bach </td>
+   <td style="text-align:right;"> 0.02 </td>
+   <td style="text-align:right;"> 0.03 </td>
+   <td style="text-align:right;"> 0.02 </td>
+   <td style="text-align:right;"> 0.03 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Percent_Poverty </td>
+   <td style="text-align:right;"> 0.40 </td>
+   <td style="text-align:right;"> 0.45 </td>
+   <td style="text-align:right;"> 0.19 </td>
+   <td style="text-align:right;"> 0.17 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Percent_White </td>
+   <td style="text-align:right;"> 0.24 </td>
+   <td style="text-align:right;"> 0.31 </td>
+   <td style="text-align:right;"> 0.34 </td>
+   <td style="text-align:right;"> 0.57 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Population </td>
+   <td style="text-align:right;"> 3106.44 </td>
+   <td style="text-align:right;"> 2957.05 </td>
+   <td style="text-align:right;"> 3466.05 </td>
+   <td style="text-align:right;"> 3633.08 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Rent </td>
+   <td style="text-align:right;"> 563.78 </td>
+   <td style="text-align:right;"> 564.74 </td>
+   <td style="text-align:right;"> 1285.75 </td>
+   <td style="text-align:right;"> 1537.99 </td>
+  </tr>
+</tbody>
+<tfoot>
+<tr><td style="padding: 0; " colspan="100%"><span style="font-style: italic;"><br></span></td></tr>
+<tr><td style="padding: 0; " colspan="100%">
+<sup></sup> Table 1</td></tr>
+</tfoot>
+</table>
+
 #### Visualizing change in indicators across time and TOD / Non-TOD tracts
 
 The primary take away from this plot is that Washington DC has likely gone through a process of prioritization of transit enabled neighborhoods. However, gentrification has followed this market prioritization of TOD. The population has become overwhelmingly white and wealthy, while generally not increasing in density. Additionally, rent prices have increased dramatically, and the population is moving towards being more educated than before.
-```{r plotIndicators}
+
+```r
 plotCounter <- 1
 
 allTracts.SummaryPlot <-
@@ -602,15 +662,19 @@ allTracts.SummaryPlot <-
     plotTheme() + theme(legend.position="bottom")
 
 allTracts.SummaryPlot
+```
 
+![](washDC_TOD_files/figure-html/plotIndicators-1.png)<!-- -->
+
+```r
 plotCounter = plotCounter + 1
 ```
 
 #### Visualizing change in population within 0.5 miles of a Metro stop
 
 Here are two additional visualizations of the change in population and rents, but this time focusing on only populations and rent within half-mile distance of a Metro stop. These figures are useful for confirming our hypotheses above – that population has stayed relatively stagnant, while rents have increased dramatically. They are possibly problematic for granular analysis of how individual stops have changed over time in that this analysis may overcount both rent and population. Because we do not have individual point data for population and rent, we use the aggregated data provided by the census. Therefore, we have visualized each stop by the average rent or total population that is associated with the tracts that are within half-a-mile of the stop, not just the disaggregated rent or population figures that would be associated with only the region that falls within 0.5 miles of the stop.
-```{r vizPopStops, warning = FALSE, message = FALSE}
 
+```r
 # Lets find the intersecting regions of the tracts and our previously created 0.5 mile regions around the metro stops
 station_tracts <- st_intersection(allTracts, stopBuffers)
 
@@ -642,7 +706,11 @@ ggplot(station_GeoSummary) +
        caption=paste0("Figure ", figCounter, ": total population within 0.5 mile walking distance of a metro stop in 2000 and 2017\nData from US Census Bureau & Open Data DC")) +
 	facet_wrap(~year) +
 	mapTheme()
+```
 
+![](washDC_TOD_files/figure-html/vizPopStops-1.png)<!-- -->
+
+```r
 figCounter = figCounter + 1
 
 # Graduated Symbols map visualizing rent
@@ -654,13 +722,15 @@ ggplot(station_GeoSummary) +
        caption=paste0("Figure ", figCounter, ": Average rent price ($) for homes within 0.5 mile walking distance of a metro stop in 2000 and 2017\nData from US Census Bureau & Open Data DC")) +
 	facet_wrap(~year) +
 	mapTheme()
-
 ```
+
+![](washDC_TOD_files/figure-html/vizPopStops-2.png)<!-- -->
 
 #### Visualizing change in rent as a function of distance from metro stations
 
 To get an idea of whether people are prioritizing access to transit, we analyze rent prices as a function of distance from a metro stop. A driver of this relationship is the willingness of people to walk to access transit. Generally, we see that rent for homes within 2 miles of a transit node are prioritized at the same level. However, homes beyond two miles seem to be prioritized more. Perhaps there is something more to this relationship – maybe more space is available as you get further from a metro stop. 
-```{r vizMRB}
+
+```r
 figCounter = figCounter + 1
 
 coolRingBuffer <- multipleRingBuffer(st_union(metroStops), 37830, 2640)
@@ -675,11 +745,13 @@ ggplot(coolRingBuffer) +
        subtitle="District of Columbia", 
        caption=paste0("Figure ", figCounter, ": 2640ft (0.5 mile) rings around DC metro stops\nData from US Census Bureau & Open Data DC")) +
   mapTheme()
-		
 ```
+
+![](washDC_TOD_files/figure-html/vizMRB-1.png)<!-- -->
 	
 	
-```{r plotRentDistStop, warning = FALSE, message = FALSE}
+
+```r
 # Use multipleRingBuffer to draw regions around the metro stops
 # Then join the census data (containing rent data) to those rings
 allTracts.rings <-
@@ -710,7 +782,11 @@ ggplot(allTracts.rings.summary,
     		 subtitle="Washington DC",
     		 caption=paste0("Plot ", plotCounter, ". Rent price ($) for homes at a certain distance (miles) from Metro stops\nRent price adjusted for inflation\nData from US Census Bureau")) +
     plotTheme() + theme(legend.position="bottom")
+```
 
+![](washDC_TOD_files/figure-html/plotRentDistStop-1.png)<!-- -->
+
+```r
 plotCounter = plotCounter + 1
 ```
 
@@ -719,7 +795,8 @@ plotCounter = plotCounter + 1
 #### Associate crime data with TOD tracts
 
 A note: we have switched to using 2010 and 2017 data for the below analysis. This is to stay consistent with the crime data that are available from Open Data DC. 
-```{r wrangleCrime, warning = FALSE, message = FALSE}
+
+```r
 # Intersect crimes with the station buffer/census tracts from 2010 & 2017 (instead of station_tracts which is 2000 & 2017)
 station_tracts10_17 <- st_intersection(allTracts10_17, stopBuffers)
 
@@ -742,13 +819,13 @@ rent_crime_byStation <-
 rentCrime_GeoByStation <-
 	left_join(metroStops, rent_crime_byStation, by = "GIS_ID") %>%
 	dplyr::select(-WEB_URL, -TRAININFO_URL)
-
 ```
 
 #### Visualize changes in rent and crime rates within 0.5 miles of a Metro stop
 
 Just as with the population and rent figures above, be caution of the rent values in this figure as they are aggregated based on census tract, not just within 0.5 miles from a Metro stop. However, the crime data are not subject to these caveats as they are point data aggregated by regions within 0.5 miles of a Metro stop. 
-```{r vizCrime}
+
+```r
 # Now that we have the data ready, lets visualize it
 figCounter = figCounter + 1
 
@@ -761,7 +838,11 @@ ggplot(rentCrime_GeoByStation) +
        caption=paste0("Figure ", figCounter, ": Average rent price ($) for homes within 0.5 mile walking distance of a metro stop in 2010 and 2017\nRent price adjusted for inflation\nData from US Census Bureau & Open Data DC")) +
 	facet_wrap(~year) +
 	mapTheme()
+```
 
+![](washDC_TOD_files/figure-html/vizCrime-1.png)<!-- -->
+
+```r
 figCounter = figCounter + 1
 
 # Graduated Symbols map visualizing crime 
@@ -775,8 +856,11 @@ ggplot(rentCrime_GeoByStation) +
 	mapTheme()
 ```
 
+![](washDC_TOD_files/figure-html/vizCrime-2.png)<!-- -->
+
 #### Tabulate differenes in crime & rend across TOD / Non-TOD tracts
-```{r tableCrime, warning = FALSE, message = FALSE}
+
+```r
 # Identify 2010 & 2017 tracts by TOD & Non-TOD
 allTracts10_17.group <- 
   rbind(
@@ -822,11 +906,45 @@ table2 <-
 table2
 ```
 
+<table class="table" style="margin-left: auto; margin-right: auto;border-bottom: 0;">
+ <thead>
+  <tr>
+   <th style="text-align:left;"> Variable </th>
+   <th style="text-align:right;"> 2010: Non-TOD </th>
+   <th style="text-align:right;"> 2010: TOD </th>
+   <th style="text-align:right;"> 2017: Non-TOD </th>
+   <th style="text-align:right;"> 2017: TOD </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Rent </td>
+   <td style="text-align:right;"> 1060.86 </td>
+   <td style="text-align:right;"> 1365.29 </td>
+   <td style="text-align:right;"> 1271.45 </td>
+   <td style="text-align:right;"> 1662.79 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Thefts </td>
+   <td style="text-align:right;"> 10027.00 </td>
+   <td style="text-align:right;"> 10753.00 </td>
+   <td style="text-align:right;"> 12541.00 </td>
+   <td style="text-align:right;"> 14512.00 </td>
+  </tr>
+</tbody>
+<tfoot>
+<tr><td style="padding: 0; " colspan="100%"><span style="font-style: italic;"><br></span></td></tr>
+<tr><td style="padding: 0; " colspan="100%">
+<sup></sup> Table 2</td></tr>
+</tfoot>
+</table>
+
 
 #### Visualizing change in rent and crime indicators across time and TOD / Non-TOD tracts
 
 These figures seem to indicate that there was a general increase in theft across both TOD and non-TOD tracts, but crimes in TOD tracts increased at a greater rate. It would be interesting to compare this to crime data collected by the Metro. Are these crimes occurring on transit services, or within the communities that surround them?
-```{r plotCrime}
+
+```r
 crimeTracts.SummaryPlot <-
 	crime_tracts.summary %>%
   gather(Variable, Value, -year, -TOD) %>%
@@ -841,6 +959,8 @@ crimeTracts.SummaryPlot <-
 
 crimeTracts.SummaryPlot
 ```
+
+![](washDC_TOD_files/figure-html/plotCrime-1.png)<!-- -->
 
 # Conclusions
 Overall, the results from our analysis of Washington DC TOD suggests that the residents of the District may value transit accessible neighborhoods over other neighborhoods. It is important, though, to consider the spatial biases of this analysis and the possible ramifications of promoting TOD, namely gentrification. 
